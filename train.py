@@ -1811,7 +1811,7 @@ class AnimaTrainer:
         train_text_encoder = self.is_train_text_encoder(args)
         network.apply_to(text_encoder, unet, train_text_encoder, train_unet)
 
-        if args.network_weights is not None:
+        if args.network_weights:
             if factory_weights_sd is not None:
                 info = network.load_state_dict(factory_weights_sd, strict=False)
             else:

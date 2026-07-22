@@ -32,6 +32,7 @@ import difflib
 import fnmatch
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -135,6 +136,21 @@ def _walk_tree(root: Path) -> Iterable[Path]:
             yield p
 
 
+def _github_token() -> str | None:
+    """Read the GitHub API token, if any. Order:
+    ANIMA_GITHUB_TOKEN → GITHUB_TOKEN → GH_TOKEN. Returns None when unset.
+
+    Authenticated requests raise the per-user limit from 60/hour/IP (often
+    shared) to 5000/hour/user — keeps `make update` reliable on a busy CI
+    box or behind a NAT with many other users on the same egress IP.
+    """
+    return (
+        os.environ.get("ANIMA_GITHUB_TOKEN")
+        or os.environ.get("GITHUB_TOKEN")
+        or os.environ.get("GH_TOKEN")
+    ) or None
+
+
 def _resolve_release(version: str | None) -> tuple[str, str, str]:
     """Return (label, tarball_url, body).
 
@@ -148,11 +164,28 @@ def _resolve_release(version: str | None) -> tuple[str, str, str]:
         api = f"https://api.github.com/repos/{REPO}/releases/latest"
     else:
         api = f"https://api.github.com/repos/{REPO}/releases/tags/{version}"
-    req = urllib.request.Request(api, headers={"Accept": "application/vnd.github+json"})
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "anima-update"}
+    if tok := _github_token():
+        headers["Authorization"] = f"Bearer {tok}"
+    req = urllib.request.Request(api, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
     except urllib.error.HTTPError as e:
+        remaining = e.headers.get("X-RateLimit-Remaining") if e.headers else None
+        reset = e.headers.get("X-RateLimit-Reset") if e.headers else None
+        if e.code == 403 and remaining == "0":
+            when = (
+                time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(int(reset)))
+                if reset
+                else "unknown"
+            )
+            sys.exit(
+                f"GitHub API rate limit hit (0/60 requests remaining).\n"
+                f"  Limit resets at {when}.\n"
+                f"  Tip: set ANIMA_GITHUB_TOKEN=ghp_… (or GITHUB_TOKEN) to raise\n"
+                f"       the limit to 5000/hour and avoid this in the future."
+            )
         sys.exit(f"GitHub API {api} returned {e.code} {e.reason}")
     except urllib.error.URLError as e:
         sys.exit(f"Could not reach GitHub: {e.reason}")
@@ -525,8 +558,6 @@ def _apply(
 
     if not no_sync:
         print("\nrunning uv sync …")
-        import os
-
         env = os.environ.copy()
         venv_scripts = ROOT / ".venv" / ("Scripts" if sys.platform == "win32" else "bin")
         if venv_scripts.exists():

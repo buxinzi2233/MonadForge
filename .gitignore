@@ -54,3 +54,4 @@ bench/x0_contradiction/prompts/
 /refs
 /__research__/AnimaLoraToolkit/
 /__research__/LyCORIS/
+webui/frontend/tsconfig.tsbuildinfo

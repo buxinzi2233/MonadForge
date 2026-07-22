@@ -30,7 +30,7 @@ def main() -> None:
         parser,
         cache_noun="latent caches",
         include_batch_size=True,
-        batch_size_default=4,
+        batch_size_default=1,
     )
     parser.add_argument("--vae", type=str, required=True, help="Path to VAE weights")
     parser.add_argument(
@@ -44,6 +44,11 @@ def main() -> None:
         action="store_true",
         default=True,
         help="Disable VAE internal cache (default: True)",
+    )
+    parser.add_argument(
+        "--tile",
+        action="store_true",
+        help="Enable VAE tiled encode (reduces peak VRAM for high-res images)",
     )
     # 2D VAE fold is ON by default: image-only pipeline, ~2x faster encode at
     # ~0.65-0.7x peak VRAM, latents equivalent within bf16 noise. See
@@ -128,6 +133,9 @@ def main() -> None:
     if args.vae_2d:
         n = vae.convert_to_2d()
         print(f"Folded VAE to 2D (image-only): {n} Conv3d -> Conv2d")
+    if args.tile:
+        vae.use_tiling = True
+        print(f"VAE tiled encode enabled")
     vae.requires_grad_(False)
     vae.eval()
 

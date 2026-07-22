@@ -104,7 +104,7 @@ def cmd_staged_preprocess(extra):
                 "--vae",
                 str(vae),
                 "--batch_size",
-                "4",
+                "1",
                 "--chunk_size",
                 "64",
                 "--recursive",
