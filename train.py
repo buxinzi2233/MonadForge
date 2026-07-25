@@ -118,6 +118,7 @@ from library.config.cli_args import (
     verify_training_args,
 )
 from library.training.loop import build_loop_state, run_training_loop
+from library.training.resume import resolve_resume_position
 from library.training.stage_schedule import (
     prepare_stage_runtime,
     stage_epoch_upper_bound,
@@ -2678,10 +2679,19 @@ class AnimaTrainer:
                         "initial_step is specified but not resuming. lr scheduler will be started from the beginning"
                     )
                 logger.info(f"skipping {initial_step} steps")
-                initial_step *= args.gradient_accumulation_steps
-
-                epoch_to_start = initial_step // math.ceil(
-                    len(train_dataloader) / args.gradient_accumulation_steps
+                initial_global_step = initial_step
+                epoch_to_start, initial_step = resolve_resume_position(
+                    initial_global_step,
+                    batches_per_epoch=len(train_dataloader),
+                    gradient_accumulation_steps=args.gradient_accumulation_steps,
+                )
+                logger.info(
+                    "resolved resume position: global_step=%s, "
+                    "start_epoch=%s, batch_offset=%s/%s",
+                    initial_global_step,
+                    epoch_to_start + 1,
+                    initial_step,
+                    len(train_dataloader),
                 )
             else:
                 epoch_to_start = initial_step // math.ceil(
